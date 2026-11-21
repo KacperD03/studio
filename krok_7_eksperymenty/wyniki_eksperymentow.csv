@@ -1,0 +1,25 @@
+scenario_id,field,goal,type,source_name,source_affil,p5_target,p10_target,map_target,p5_alt,p5_rand
+1,Computer Science,AI i Algorytmy (PL),similarity,Jack J. Dongarra,AGH (PL),1.0,1.0,1.0,0.0,0.0
+2,Computer Science,AI + Medycyna / Fizyka (DE),complementarity,Cordelia Schmid,TUM (DE),1.0,0.9,0.9888888888888889,0.0,0.8
+3,Medicine,Medycyna Kliniczna (DE),similarity,Jost Bruno Jonas,Heidelberg (DE),1.0,1.0,1.0,0.0,0.0
+4,Medicine,Medycyna + Neurobiologia / AI (FR),complementarity,Kaj Blennow,Sorbonne (FR),1.0,1.0,1.0,0.2,0.4
+5,"Biochemistry, Genetics and Molecular Biology",Biologia Molekularna i Genetyka (FR),similarity,Guido Kroemer,Sorbonne (FR),1.0,1.0,1.0,0.0,0.2
+6,"Biochemistry, Genetics and Molecular Biology",Biotechnologia + Medycyna / Chemia (PL),complementarity,Stefano Volinia,UW (PL),1.0,1.0,1.0,0.6,0.6
+7,Physics and Astronomy,Fizyka Kwantowa i Cząstek (PL),similarity,Z. Doležal,AGH (PL),1.0,1.0,1.0,0.0,0.0
+8,Physics and Astronomy,Fizyka + Materiały / Informatyka (FR),complementarity,Y. Wu,Paris-Saclay (FR),0.6,0.8,0.6844246031746032,0.0,0.4
+9,Chemistry,Chemia Stosowana i Kataliza (DE),similarity,Horst Kessler,TUM (DE),1.0,0.9,0.9888888888888889,0.0,0.0
+10,Chemistry,Chemia + Inżynieria Materiałowa / Środowisko (PL),complementarity,Tomislav Friščić,UW (PL),0.8,0.9,0.9060405643738976,0.0,1.0
+11,Materials Science,Nanomateriały i Kompozyty (FR),similarity,Patrick Couvreur,Paris-Saclay (FR),1.0,1.0,1.0,0.0,0.0
+12,Materials Science,Materiały + Fizyka / Inżynieria (DE),complementarity,Tao Zhang,TUM (DE),0.8,0.6,0.8634920634920635,0.4,0.6
+13,Engineering,Inżynieria i Diagnostyka Maszyn (PL),similarity,Rui Luís Reis,AGH (PL),0.8,0.8,0.8802579365079365,0.0,0.0
+14,Engineering,Inżynieria + AI / Materiały / Energia (DE),complementarity,Hubert Andreas Gasteiger,TUM (DE),0.8,0.7,0.869047619047619,0.6,0.8
+15,Mathematics,Matematyka Stosowana i Analiza (FR),similarity,Ronald R. Coifman,Paris-Saclay (FR),1.0,1.0,1.0,0.0,0.0
+16,Mathematics,Matematyka + Informatyka / Ekonomia (PL),complementarity,Noga Alon,PW (PL),0.8,0.9,0.7856701940035273,0.0,0.4
+17,Environmental Science,Nauki o Środowisku i Klimat (DE),similarity,Dieter Gerten,Humboldt (DE),1.0,1.0,1.0,0.0,0.0
+18,Environmental Science,Środowisko + Ekonomia / Biologia (FR),complementarity,Philippe Ciais,Paris-Saclay (FR),0.6,0.6,0.625925925925926,0.0,0.4
+19,Neuroscience,Neuronauka Poznawcza (DE),similarity,Christof Koch,Humboldt (DE),1.0,1.0,1.0,0.0,0.2
+20,Neuroscience,Neuronauka + AI / Medycyna (PL),complementarity,Andrzej S Cichocki,PW (PL),1.0,0.8,0.959375,0.6,0.6
+21,Social Sciences,Nauki Społeczne i Polityka Publiczna (FR),similarity,Jaime A. Teixeira da Silva,Sorbonne (FR),1.0,0.8,0.9526289682539681,0.0,0.0
+22,Social Sciences,Nauki Społeczne + AI / Środowisko (PL),complementarity,Oded Stark,UW (PL),0.2,0.4,0.5654761904761905,0.4,0.2
+23,"Economics, Econometrics and Finance",Ekonomia i Ekonometria (DE),similarity,Simiao Chen,Heidelberg (DE),1.0,0.9,0.9626543209876544,0.0,0.2
+24,"Economics, Econometrics and Finance",Ekonomia + Matematyka / Informatyka (FR),complementarity,Jean Jacod,Sorbonne (FR),0.8,0.9,0.7856701940035273,0.0,0.4

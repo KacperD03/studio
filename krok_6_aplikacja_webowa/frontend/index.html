@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weimar Research Hub — Wyszukiwanie Partnerów Naukowych</title>
+  <!-- Tailwind CSS & FontAwesome Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- React & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .badge-pl { background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+    .badge-de { background-color: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+    .badge-fr { background-color: #dbeafe; color: #1e40af; border: 1px solid #60a5fa; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+    const PAGE_SIZE = 24;
+
+    function App() {
+      const [tab, setTab] = useState("search"); // 'search', 'recommend', 'proposals', 'stats'
+      const [researchers, setResearchers] = useState([]);
+      const [catalogAll, setCatalogAll] = useState([]);
+      const [loading, setLoading] = useState(false);
+
+      // Filtry i sortowanie
+      const [filterCountry, setFilterCountry] = useState("");
+      const [filterAffiliation, setFilterAffiliation] = useState("");
+      const [filterDomain, setFilterDomain] = useState("");
+      const [filterField, setFilterField] = useState("");
+      const [sortBy, setSortBy] = useState("cited");
+      const [searchQuery, setSearchQuery] = useState("");
+      const [page, setPage] = useState(1);
+
+      // Podgląd szczegółów naukowca
+      const [detailData, setDetailData] = useState(null);
+      const [detailLoading, setDetailLoading] = useState(false);
+
+      // Rekomendacje
+      const [recSource, setRecSource] = useState(null);
+      const [recMode, setRecMode] = useState("complementarity");
+      const [recResults, setRecResults] = useState([]);
+      const [recLoading, setRecLoading] = useState(false);
+      const [diffCountryOnly, setDiffCountryOnly] = useState(true);
+      const [recExplanation, setRecExplanation] = useState({});
+      const [visibleExplanations, setVisibleExplanations] = useState({});
+
+      // Konsorcjum i propozycje projektów
+      const [consortium, setConsortium] = useState([]);
+      const [proposalData, setProposalData] = useState(null);
+      const [proposalLoading, setProposalLoading] = useState(false);
+
+      // Statystyki bazy
+      const [stats, setStats] = useState(null);
+
+      // Załaduj statystyki i pełny katalog pomocniczy przy starcie
+      useEffect(() => {
+        fetch("/api/stats")
+          .then(res => res.json())
+          .then(setStats)
+          .catch(console.error);
+
+        fetch("/api/researchers")
+          .then(res => res.json())
+          .then(data => setCatalogAll(data.results || []))
+          .catch(console.error);
+      }, []);
+
+      // Pobranie przefiltrowanej listy naukowców
+      const fetchResearchers = (customQuery) => {
+        setLoading(true);
+        const qVal = customQuery !== undefined ? customQuery : searchQuery;
+        const params = new URLSearchParams();
+        if (filterCountry) params.set("country", filterCountry);
+        if (filterAffiliation) params.set("affiliation", filterAffiliation);
+        if (filterDomain) params.set("domain", filterDomain);
+        if (filterField) params.set("field", filterField);
+        if (sortBy) params.set("sort", sortBy);
+        if (qVal.trim()) params.set("q", qVal.trim());
+
+        fetch(`/api/researchers?${params.toString()}`)
+          .then(res => res.json())
+          .then(data => {
+            setResearchers(data.results || []);
+            setPage(1);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      };
+
+      useEffect(() => {
+        fetchResearchers();
+      }, [filterCountry, filterAffiliation, filterDomain, filterField, sortBy]);
+
+      // Paginacja wyników katalogu
+      const totalPages = Math.max(1, Math.ceil(researchers.length / PAGE_SIZE));
+      const pagedResearchers = useMemo(() => {
+        const start = (page - 1) * PAGE_SIZE;
+        return researchers.slice(start, start + PAGE_SIZE);
+      }, [researchers, page]);
+
+      // Pobranie detali naukowca
+      const openDetail = (id) => {
+        setDetailLoading(true);
+        fetch(`/api/researchers/${id}`)
+          .then(res => res.json())
+          .then(data => {
+            setDetailData(data);
+            setDetailLoading(false);
+          })
+          .catch(() => setDetailLoading(false));
+      };
+
+      // Funkcja wyliczająca rekomendacje z jawnie przekazanym stanem
+      const fetchRecommendations = (source, mode, diffCountry) => {
+        if (!source) return;
+        setRecLoading(true);
+        const params = new URLSearchParams({
+          source_id: source.openalex_id,
+          mode: mode,
+          different_country: String(diffCountry),
+          top_k: "6"
+        });
+        fetch(`/api/recommendations?${params.toString()}`)
+          .then(res => res.json())
+          .then(data => {
+            setRecResults(data.results || []);
+            setRecLoading(false);
+          })
+          .catch(() => setRecLoading(false));
+      };
+
+      const runRecommendation = (source) => {
+        setRecSource(source);
+        setRecExplanation({});
+        setVisibleExplanations({});
+        setTab("recommend");
+        fetchRecommendations(source, recMode, diffCountryOnly);
+      };
+
+      const handleModeChange = (mode) => {
+        setRecMode(mode);
+        setVisibleExplanations({});
+        if (recSource) {
+          fetchRecommendations(recSource, mode, diffCountryOnly);
+        }
+      };
+
+      const handleDiffCountryToggle = (checked) => {
+        setDiffCountryOnly(checked);
+        if (recSource) {
+          fetchRecommendations(recSource, recMode, checked);
+        }
+      };
+
+      // Pobranie / przełączenie uzasadnienia RAG
+      const toggleExplanation = (targetId) => {
+        if (!recSource) return;
+        const key = `${recSource.openalex_id}_${targetId}_${recMode}`;
+        if (visibleExplanations[key]) {
+          setVisibleExplanations(prev => ({ ...prev, [key]: false }));
+          return;
+        }
+        if (recExplanation[key]) {
+          setVisibleExplanations(prev => ({ ...prev, [key]: true }));
+          return;
+        }
+
+        fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_id: recSource.openalex_id,
+            target_id: targetId,
+            mode: recMode
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            setRecExplanation(prev => ({ ...prev, [key]: data }));
+            setVisibleExplanations(prev => ({ ...prev, [key]: true }));
+          });
+      };
+
+      // Zarządzanie konsorcjum
+      const toggleConsortium = (r) => {
+        const exists = consortium.some(c => c.openalex_id === r.openalex_id);
+        if (exists) {
+          setConsortium(consortium.filter(c => c.openalex_id !== r.openalex_id));
+        } else {
+          if (consortium.length >= 3) {
+            alert("Konsorcjum może liczyć maksymalnie 3 naukowców!");
+            return;
+          }
+          setConsortium([...consortium, r]);
+        }
+      };
+
+      // Szybkie losowanie interdyscyplinarnego konsorcjum PL-DE-FR
+      const pickRandomConsortium = () => {
+        if (catalogAll.length === 0) return;
+        const picked = [];
+        const usedDomains = new Set();
+        for (const cCode of ["PL", "DE", "FR"]) {
+          const pool = catalogAll.filter(r => r.country === cCode && !usedDomains.has(r.primary_domain));
+          const fallbackPool = pool.length > 0 ? pool : catalogAll.filter(r => r.country === cCode);
+          if (fallbackPool.length > 0) {
+            const topPool = fallbackPool.slice(0, Math.min(40, fallbackPool.length));
+            const chosen = topPool[Math.floor(Math.random() * topPool.length)];
+            picked.push(chosen);
+            usedDomains.add(chosen.primary_domain);
+          }
+        }
+        setConsortium(picked);
+        setProposalData(null);
+      };
+
+      // Generowanie propozycji projektu
+      const generateProposal = () => {
+        if (consortium.length < 2) {
+          alert("Wybierz przynajmniej 2 naukowców do konsorcjum!");
+          return;
+        }
+        setProposalLoading(true);
+        fetch("/api/proposals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            researcher_ids: consortium.map(c => c.openalex_id)
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            setProposalData(data);
+            setProposalLoading(false);
+          })
+          .catch(() => setProposalLoading(false));
+      };
+
+      // Eksport propozycji do pliku Markdown
+      const downloadProposalMd = () => {
+        if (!proposalData) return;
+        const lines = [
+          `# ${proposalData.project_title}`,
+          `**Akronim:** ${proposalData.acronym}`,
+          "",
+          "## Konsorcjum",
+          ...(proposalData.consortium || []).map(m => `- **${m.name}** (${m.affiliation}, ${m.country}) — ${m.field || m.domain}`),
+          "",
+          "## Uzasadnienie naukowe",
+          proposalData.scientific_rationale || "",
+          "",
+          "## Pakiety Robocze (Work Packages)"
+        ];
+        for (const wp of proposalData.work_packages || []) {
+          lines.push(`### ${wp.wp_id}: ${wp.nazwa} (Lider: ${wp.lider})`);
+          for (const z of wp.zadania || []) {
+            lines.push(`- ${z}`);
+          }
+          lines.push("");
+        }
+        lines.push("## Oczekiwane rezultaty");
+        for (const p of proposalData.expected_outcomes?.publikacje || []) lines.push(`- [Publikacje] ${p}`);
+        for (const o of proposalData.expected_outcomes?.oprogramowanie_i_artefakty || []) lines.push(`- [Artefakty] ${o}`);
+        for (const g of proposalData.expected_outcomes?.aplikacje_grantowe || []) lines.push(`- [Granty] ${g}`);
+
+        const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${(proposalData.acronym || "weimar-project").toLowerCase()}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const getFlag = (c) => {
+        if (c === "PL") return "🇵🇱 Polska";
+        if (c === "DE") return "🇩🇪 Niemcy";
+        if (c === "FR") return "🇫🇷 Francja";
+        return c;
+      };
+
+      const getBadgeClass = (c) => {
+        if (c === "PL") return "badge-pl";
+        if (c === "DE") return "badge-de";
+        if (c === "FR") return "badge-fr";
+        return "bg-gray-100 text-gray-800";
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Header */}
+          <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">🏛️</span>
+                    <div>
+                      <h1 className="text-2xl font-bold tracking-tight">Weimar Research Hub</h1>
+                      <p className="text-sm text-indigo-200">
+                        Inteligentna platforma kojarzenia naukowców Trójkąta Weimarskiego we wszystkich dziedzinach nauki
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2.5 text-xs font-semibold">
+                    <span className="px-2 py-0.5 rounded bg-red-950/60 border border-red-500/30 text-red-200">🇵🇱 Polska (AGH, UW, PW)</span>
+                    <span className="px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/30 text-amber-200">🇩🇪 Niemcy (TUM, Heidelberg, Humboldt)</span>
+                    <span className="px-2 py-0.5 rounded bg-blue-950/60 border border-blue-500/30 text-blue-200">🇫🇷 Francja (Sorbonne, Paris-Saclay, ENS)</span>
+                  </div>
+                </div>
+
+                {/* Status Bar */}
+                <div className="flex items-center gap-4 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700 text-sm">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-indigo-400">{stats ? stats.total_researchers : "..."}</div>
+                    <div className="text-xs text-slate-400">Naukowców</div>
+                  </div>
+                  <div className="h-8 w-px bg-slate-700"></div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-emerald-400">{stats ? stats.total_publications : "..."}</div>
+                    <div className="text-xs text-slate-400">Publikacji</div>
+                  </div>
+                  <div className="h-8 w-px bg-slate-700"></div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-sky-400">{stats ? Object.keys(stats.fields || {}).length : "..."}</div>
+                    <div className="text-xs text-slate-400">Dyscyplin</div>
+                  </div>
+                  <div className="h-8 w-px bg-slate-700"></div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-amber-400">9 / 9</div>
+                    <div className="text-xs text-slate-400">Uczelni</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <nav className="flex flex-wrap gap-2 mt-6 border-b border-slate-700 text-sm font-medium">
+                <button
+                  onClick={() => setTab("search")}
+                  className={`py-2.5 px-4 rounded-t-lg transition flex items-center gap-2 ${
+                    tab === "search" ? "bg-slate-800 text-white border-t-2 border-indigo-500" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-magnifying-glass"></i> Katalog Naukowców
+                </button>
+                <button
+                  onClick={() => setTab("recommend")}
+                  className={`py-2.5 px-4 rounded-t-lg transition flex items-center gap-2 ${
+                    tab === "recommend" ? "bg-slate-800 text-white border-t-2 border-indigo-500" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-compass"></i> Silnik Rekomendacji
+                  {recSource && <span className="bg-indigo-600 text-xs px-2 py-0.5 rounded-full ml-1">Aktywny</span>}
+                </button>
+                <button
+                  onClick={() => setTab("proposals")}
+                  className={`py-2.5 px-4 rounded-t-lg transition flex items-center gap-2 ${
+                    tab === "proposals" ? "bg-slate-800 text-white border-t-2 border-indigo-500" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-file-contract"></i> Generator Propozycji (Krok 5)
+                  {consortium.length > 0 && (
+                    <span className="bg-emerald-600 text-xs px-2 py-0.5 rounded-full">{consortium.length}/3</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setTab("stats")}
+                  className={`py-2.5 px-4 rounded-t-lg transition flex items-center gap-2 ${
+                    tab === "stats" ? "bg-slate-800 text-white border-t-2 border-indigo-500" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <i className="fa-solid fa-chart-pie"></i> Statystyki Bazy
+                </button>
+              </nav>
+            </div>
+          </header>
+
+          {/* Main Content Area */}
+          <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 flex-1 w-full">
+
+            {/* TAB 1: SEARCH & BROWSE */}
+            {tab === "search" && (
+              <div className="space-y-6">
+                {/* Panel filtrów */}
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                    {/* Wyszukiwanie tekstowe */}
+                    <div className="lg:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Szukaj</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            placeholder="Nazwisko, dyscyplina, kompetencja..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && fetchResearchers(searchQuery)}
+                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <i className="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+                        </div>
+                        <button
+                          onClick={() => fetchResearchers(searchQuery)}
+                          className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition"
+                        >
+                          Szukaj
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Kraj */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Kraj</label>
+                      <select
+                        value={filterCountry}
+                        onChange={(e) => { setFilterCountry(e.target.value); setFilterAffiliation(""); }}
+                        className="w-full py-2 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Wszystkie kraje (PL, DE, FR)</option>
+                        <option value="PL">🇵🇱 Polska</option>
+                        <option value="DE">🇩🇪 Niemcy</option>
+                        <option value="FR">🇫🇷 Francja</option>
+                      </select>
+                    </div>
+
+                    {/* Uczelnia */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Uczelnia</label>
+                      <select
+                        value={filterAffiliation}
+                        onChange={(e) => setFilterAffiliation(e.target.value)}
+                        className="w-full py-2 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Wszystkie 9 uczelni</option>
+                        {(!filterCountry || filterCountry === "PL") && (
+                          <optgroup label="Polska">
+                            <option value="AGH">AGH w Krakowie</option>
+                            <option value="UW">Uniwersytet Warszawski</option>
+                            <option value="PW">Politechnika Warszawska</option>
+                          </optgroup>
+                        )}
+                        {(!filterCountry || filterCountry === "DE") && (
+                          <optgroup label="Niemcy">
+                            <option value="TUM">TU Monachium (TUM)</option>
+                            <option value="Heidelberg">Uniwersytet w Heidelbergu</option>
+                            <option value="Humboldt">Uniwersytet Humboldta w Berlinie</option>
+                          </optgroup>
+                        )}
+                        {(!filterCountry || filterCountry === "FR") && (
+                          <optgroup label="Francja">
+                            <option value="Sorbonne">Sorbona (Sorbonne Université)</option>
+                            <option value="Paris-Saclay">Université Paris-Saclay</option>
+                            <option value="ENS">École Normale Supérieure (ENS)</option>
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Dziedzina naukowa (główny obszar) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Obszar naukowy</label>
+                      <select
+                        value={filterDomain}
+                        onChange={(e) => setFilterDomain(e.target.value)}
+                        className="w-full py-2 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Wszystkie obszary ({Object.keys(stats?.domains || {}).length})</option>
+                        {Object.entries(stats?.domains || {}).map(([dom, cnt]) => (
+                          <option key={dom} value={dom}>{dom} ({cnt})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Dyscyplina OpenAlex + Sortowanie */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Dyscyplina OpenAlex</label>
+                      <select
+                        value={filterField}
+                        onChange={(e) => setFilterField(e.target.value)}
+                        className="w-full py-2 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Wszystkie dyscypliny ({Object.keys(stats?.fields || {}).length})</option>
+                        {Object.entries(stats?.fields || {}).map(([fld, cnt]) => (
+                          <option key={fld} value={fld}>{fld} ({cnt})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap justify-between items-center gap-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                    <div className="flex items-center gap-4">
+                      <span>
+                        Znaleziono <span className="font-bold text-slate-800">{researchers.length}</span> naukowców
+                        {researchers.length > PAGE_SIZE && ` (strona ${page} z ${totalPages})`}
+                      </span>
+                      {(filterCountry || filterAffiliation || filterDomain || filterField || searchQuery) && (
+                        <button
+                          onClick={() => {
+                            setFilterCountry("");
+                            setFilterAffiliation("");
+                            setFilterDomain("");
+                            setFilterField("");
+                            setSearchQuery("");
+                            fetchResearchers("");
+                          }}
+                          className="text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Wyczyść filtry
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-500">Sortuj:</span>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="py-1 px-2.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="cited">Najwięcej cytowań</option>
+                        <option value="h_index">Najwyższy h-index</option>
+                        <option value="name">Alfabetycznie (A–Z)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Siatka kart naukowców */}
+                {loading ? (
+                  <div className="text-center py-20 text-slate-400">
+                    <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-indigo-500"></i>
+                    <p>Ładowanie katalogu naukowców...</p>
+                  </div>
+                ) : researchers.length === 0 ? (
+                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 text-slate-500 text-sm">
+                    Brak naukowców spełniających wybrane kryteria filtrowania.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {pagedResearchers.map(r => {
+                        const inConsortium = consortium.some(c => c.openalex_id === r.openalex_id);
+                        return (
+                          <div key={r.openalex_id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-start gap-2">
+                                <div>
+                                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getBadgeClass(r.country)}`}>
+                                    {getFlag(r.country)}
+                                  </span>
+                                  <span className="ml-2 text-xs font-medium text-slate-500">{r.affiliation}</span>
+                                </div>
+                                <button
+                                  onClick={() => toggleConsortium(r)}
+                                  title={inConsortium ? "Usuń z konsorcjum projektu" : "Dodaj do konsorcjum projektu"}
+                                  className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition ${
+                                    inConsortium
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {inConsortium ? "✓ W konsorcjum" : "+ Do projektu"}
+                                </button>
+                              </div>
+
+                              <h3 className="text-base font-bold text-slate-900 mt-2.5 hover:text-indigo-600 cursor-pointer" onClick={() => openDetail(r.openalex_id)}>
+                                {r.name}
+                              </h3>
+
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-xs font-semibold text-indigo-600">
+                                  {r.primary_domain}
+                                </span>
+                                {r.field && (
+                                  <span className="text-[10px] font-medium bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100">
+                                    {r.field}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-1.5 mt-3">
+                                {(r.competencies || []).slice(0, 3).map((c, i) => (
+                                  <span key={i} className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                                    {c}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                              <div className="flex gap-3">
+                                <span title="Indeks H"><i className="fa-solid fa-award text-amber-500 mr-1"></i>h={r.h_index}</span>
+                                <span title="Liczba cytowań"><i className="fa-solid fa-quote-right text-indigo-400 mr-1"></i>{r.cited_by_count.toLocaleString()}</span>
+                                <span title="Publikacje"><i className="fa-solid fa-book text-slate-400 mr-1"></i>{r.publications_count}</span>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => openDetail(r.openalex_id)}
+                                  className="text-slate-600 hover:text-indigo-600 font-medium"
+                                >
+                                  Profil
+                                </button>
+                                <button
+                                  onClick={() => runRecommendation(r)}
+                                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-md font-medium transition"
+                                >
+                                  Rekomenduj
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Paginacja */}
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center gap-3 pt-4">
+                        <button
+                          onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                          disabled={page === 1}
+                          className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                        >
+                          ← Poprzednia
+                        </button>
+                        <span className="text-xs font-medium text-slate-600">
+                          Strona <span className="font-bold text-slate-900">{page}</span> z <span className="font-bold text-slate-900">{totalPages}</span>
+                        </span>
+                        <button
+                          onClick={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                          disabled={page === totalPages}
+                          className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                        >
+                          Następna →
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: RECOMMENDATIONS */}
+            {tab === "recommend" && (
+              <div className="space-y-6">
+                {/* Nagłówek wybranego naukowca */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div className="flex-1">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Naukowiec źródłowy</span>
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
+                        <h2 className="text-xl font-bold text-slate-900">
+                          {recSource ? recSource.name : "Wybierz naukowca z listy lub katalogu"}
+                        </h2>
+                        {catalogAll.length > 0 && (
+                          <select
+                            value={recSource?.openalex_id || ""}
+                            onChange={(e) => {
+                              const found = catalogAll.find(x => x.openalex_id === e.target.value);
+                              if (found) runRecommendation(found);
+                            }}
+                            className="text-xs py-1.5 px-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-700 max-w-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">-- Zmień naukowca źródłowego --</option>
+                            {catalogAll.slice(0, 120).map(r => (
+                              <option key={r.openalex_id} value={r.openalex_id}>
+                                {r.name} ({r.affiliation}, {r.country} — {r.field || r.primary_domain})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      {recSource && (
+                        <p className="text-sm text-slate-600 mt-1">
+                          {recSource.affiliation} ({getFlag(recSource.country)}) • {recSource.field && <span className="font-semibold text-slate-800">{recSource.field}</span>} • <span className="font-semibold text-indigo-600">{recSource.primary_domain}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Przełącznik trybów */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="bg-slate-100 p-1 rounded-xl flex">
+                        <button
+                          onClick={() => handleModeChange("similarity")}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            recMode === "similarity" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <i className="fa-solid fa-bullseye"></i> Podobieństwo tematyczne
+                        </button>
+                        <button
+                          onClick={() => handleModeChange("complementarity")}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            recMode === "complementarity" ? "bg-white text-purple-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <i className="fa-solid fa-puzzle-piece"></i> Komplementarność kompetencji
+                        </button>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={diffCountryOnly}
+                          onChange={(e) => handleDiffCountryToggle(e.target.checked)}
+                          className="rounded text-indigo-600"
+                        />
+                        Tylko inne kraje (Trójkąt Weimarski)
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Informacja o wybranym trybie */}
+                  <div className="mt-4 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
+                    <span className="text-base text-indigo-600">ℹ️</span>
+                    {recMode === "similarity" ? (
+                      <div>
+                        <strong className="text-slate-800">Tryb Podobieństwa Tematycznego:</strong> System wyszukuje naukowców pracujących nad zbliżoną tematyką na podstawie 128-wymiarowych wektorów semantycznych (TF-IDF + SVD Cosine Similarity) oraz wspólnych zagadnień badawczych.
+                      </div>
+                    ) : (
+                      <div>
+                        <strong className="text-slate-800">Tryb Komplementarności Kompetencji:</strong> System łączy uzupełniające się dziedziny nauki (np. AI + Medycyna, Fizyka + Inżynieria Materiałowa, Ekonomia + Nauki o Środowisku), szukając pomostu tematycznego przy zachowaniu odmiennych kompetencji do wniosków grantowych.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lista rekomendacji */}
+                {recLoading ? (
+                  <div className="text-center py-20 text-slate-400">
+                    <i className="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-indigo-500"></i>
+                    <p>Obliczanie rankingu współpracowników...</p>
+                  </div>
+                ) : !recSource ? (
+                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                    <p className="text-slate-500 text-sm">
+                      Wybierz badacza z listy rozwijanej powyżej albo przejdź do zakładki{" "}
+                      <strong className="text-indigo-600 cursor-pointer" onClick={() => setTab("search")}>Katalog Naukowców</strong> i kliknij „Rekomenduj”.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recResults.map((item, idx) => {
+                      const target = item.researcher;
+                      const expKey = `${recSource.openalex_id}_${target.openalex_id}_${recMode}`;
+                      const explanation = recExplanation[expKey];
+                      const isExpVisible = !!visibleExplanations[expKey];
+                      const inConsortium = consortium.some(c => c.openalex_id === target.openalex_id);
+
+                      return (
+                        <div key={target.openalex_id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="flex items-start gap-3">
+                              <span className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-700 font-bold flex items-center justify-center text-sm shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="text-base font-bold text-slate-900 hover:text-indigo-600 cursor-pointer" onClick={() => openDetail(target.openalex_id)}>
+                                    {target.name}
+                                  </h3>
+                                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getBadgeClass(target.country)}`}>
+                                    {getFlag(target.country)}
+                                  </span>
+                                  <span className="text-xs text-slate-500">{target.affiliation}</span>
+                                </div>
+                                <p className="text-xs text-indigo-600 font-medium mt-0.5">
+                                  {target.field ? `${target.field} • ` : ""}{target.primary_domain}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Pasek dopasowania */}
+                            <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                              <div className="text-right">
+                                <div className="text-xs text-slate-400 font-medium uppercase">Dopasowanie</div>
+                                <div className="text-lg font-extrabold text-slate-900">{(item.score * 100).toFixed(1)}%</div>
+                              </div>
+                              <div className="w-24 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${recMode === 'similarity' ? 'bg-indigo-600' : 'bg-purple-600'}`}
+                                  style={{ width: `${Math.min(100, item.score * 100)}%` }}
+                                ></div>
+                              </div>
+
+                              <button
+                                onClick={() => toggleConsortium(target)}
+                                className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition ${
+                                  inConsortium
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                }`}
+                              >
+                                {inConsortium ? "✓ W konsorcjum" : "+ Konsorcjum"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Rationale */}
+                          <div className="mt-3 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <strong>Kluczowa cecha:</strong> {item.rationale}
+                          </div>
+
+                          {/* Wnoszone lub wspólne kompetencje */}
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+                            <span className="font-semibold text-slate-500 mr-1">
+                              {recMode === "similarity" ? "Wspólne zagadnienia:" : "Wnosi do zespołu:"}
+                            </span>
+                            {(recMode === "similarity" ? item.shared_topics : item.partner_unique_skills || []).map((s, i) => (
+                              <span key={i} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[11px]">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Przycisk rozwijania uzasadnienia RAG */}
+                          <div className="mt-4 pt-3 border-t border-slate-100">
+                            <button
+                              onClick={() => toggleExplanation(target.openalex_id)}
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5"
+                            >
+                              <i className="fa-solid fa-graduation-cap"></i>
+                              {isExpVisible ? "Ukryj uzasadnienie naukowe" : "Dlaczego ta współpraca? (Uzasadnienie RAG z publikacjami)"}
+                            </button>
+
+                            {/* Panel Uzasadnienia RAG z publikacjami (KROK 4) */}
+                            {isExpVisible && explanation && (
+                              <div className="mt-3 p-4 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-slate-800 space-y-3">
+                                <div className="flex flex-wrap justify-between items-center gap-2">
+                                  <span className="font-semibold text-indigo-900 flex items-center gap-2">
+                                    <i className="fa-solid fa-book-open"></i> {explanation.mode}
+                                  </span>
+                                  {(explanation.shared_keywords || []).length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {explanation.shared_keywords.slice(0, 5).map((kw, ki) => (
+                                        <span key={ki} className="bg-white text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                          #{kw}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="whitespace-pre-line leading-relaxed text-slate-700">
+                                  {explanation.detailed_explanation}
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-indigo-100 text-[11px]">
+                                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
+                                    <span className="font-bold text-slate-700">Publikacja bazowa ({explanation.researcher_a.name}):</span>
+                                    <div className="text-slate-900 font-medium mt-1">„{explanation.researcher_a.cited_publication.title}” ({explanation.researcher_a.cited_publication.year})</div>
+                                  </div>
+                                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
+                                    <span className="font-bold text-slate-700">Publikacja partnerska ({explanation.researcher_b.name}):</span>
+                                    <div className="text-slate-900 font-medium mt-1">„{explanation.researcher_b.cited_publication.title}” ({explanation.researcher_b.cited_publication.year})</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: PROPOSALS (KROK 5) */}
+            {tab === "proposals" && (
+              <div className="space-y-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">Generator Propozycji Współpracy (Krok 5)</h2>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Wybierz 2 lub 3 naukowców z różnych dziedzin i krajów, aby automatycznie wygenerować projekt, pakiety robocze oraz rezultaty grantowe.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={pickRandomConsortium}
+                        className="px-4 py-2.5 rounded-xl font-semibold text-xs border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition flex items-center gap-1.5"
+                      >
+                        <i className="fa-solid fa-shuffle"></i> Losuj konsorcjum PL–DE–FR
+                      </button>
+
+                      <button
+                        onClick={generateProposal}
+                        disabled={consortium.length < 2 || proposalLoading}
+                        className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition flex items-center gap-2 ${
+                          consortium.length >= 2 && !proposalLoading
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {proposalLoading ? (
+                          <>
+                            <i className="fa-solid fa-circle-notch fa-spin"></i> Generowanie...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-wand-magic-sparkles"></i> Wygeneruj projekt badawczy
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lista aktualnie wybranego konsorcjum */}
+                  <div className="mt-5 pt-4 border-t border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+                      Skład konsorcjum ({consortium.length}/3 naukowców):
+                    </span>
+                    {consortium.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">
+                        Nie wybrano jeszcze żadnego naukowca. Kliknij „+ Do projektu” w katalogu lub użyj przycisku „Losuj konsorcjum PL–DE–FR”.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {consortium.map(c => (
+                          <div key={c.openalex_id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                            <div>
+                              <div className="font-bold text-slate-900">{c.name}</div>
+                              <div className="text-slate-500">{c.affiliation} ({getFlag(c.country)})</div>
+                              <div className="text-indigo-600 font-medium text-[11px] mt-0.5">{c.field ? `${c.field} — ` : ""}{c.primary_domain}</div>
+                            </div>
+                            <button
+                              onClick={() => toggleConsortium(c)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Usuń"
+                            >
+                              <i className="fa-solid fa-xmark text-sm"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Wynik wygenerowanej propozycji */}
+                {proposalData && (
+                  <div className="bg-white p-7 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+                    <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row justify-between items-start gap-4">
+                      <div>
+                        <div className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-extrabold tracking-wider uppercase mb-2">
+                          Akronim: {proposalData.acronym}
+                        </div>
+                        <h2 className="text-2xl font-black text-slate-900 leading-tight">
+                          {proposalData.project_title}
+                        </h2>
+                      </div>
+                      <button
+                        onClick={downloadProposalMd}
+                        className="shrink-0 px-3.5 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center gap-1.5"
+                      >
+                        <i className="fa-solid fa-download"></i> Pobierz projekt (.md)
+                      </button>
+                    </div>
+
+                    {/* Uzasadnienie */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <i className="fa-solid fa-lightbulb text-amber-500"></i> Uzasadnienie naukowe i luka badawcza
+                      </h3>
+                      <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        {proposalData.scientific_rationale}
+                      </p>
+                    </div>
+
+                    {/* Pakiety Robocze WP */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <i className="fa-solid fa-layer-group text-indigo-500"></i> Pakiety Robocze i Podział Ról (Work Packages)
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(proposalData.work_packages || []).map((wp, i) => (
+                          <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-extrabold text-indigo-700">{wp.wp_id}</span>
+                              <span className="text-[11px] text-slate-500 italic">Lider: {wp.lider}</span>
+                            </div>
+                            <h4 className="font-bold text-slate-900 text-sm">{wp.nazwa}</h4>
+                            <ul className="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                              {wp.zadania.map((z, j) => (
+                                <li key={j}>{z}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Rezultaty */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <i className="fa-solid fa-bullseye text-emerald-500"></i> Oczekiwane Rezultaty
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                          <h4 className="font-bold text-emerald-900 mb-2 flex items-center gap-1.5">
+                            <i className="fa-solid fa-newspaper text-emerald-600"></i> Publikacje Q1
+                          </h4>
+                          <ul className="space-y-1.5 text-slate-700">
+                            {(proposalData.expected_outcomes?.publikacje || []).map((p, i) => (
+                              <li key={i}>• {p}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                          <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-1.5">
+                            <i className="fa-solid fa-code text-blue-600"></i> Artefakty & Open Science
+                          </h4>
+                          <ul className="space-y-1.5 text-slate-700">
+                            {(proposalData.expected_outcomes?.oprogramowanie_i_artefakty || []).map((o, i) => (
+                              <li key={i}>• {o}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="p-4 bg-purple-50/50 rounded-xl border border-purple-100">
+                          <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-1.5">
+                            <i className="fa-solid fa-landmark text-purple-600"></i> Granty Międzynarodowe
+                          </h4>
+                          <ul className="space-y-1.5 text-slate-700">
+                            {(proposalData.expected_outcomes?.aplikacje_grantowe || []).map((g, i) => (
+                              <li key={i}>• {g}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 4: STATS */}
+            {tab === "stats" && stats && (
+              <div className="space-y-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+                  <div className="flex flex-wrap justify-between items-center gap-3">
+                    <h2 className="text-xl font-bold text-slate-900">Statystyki Bazy Danych — Weimar Research Hub</h2>
+                    <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full">
+                      Abstrakty w bazie: {stats.total_abstracts} / {stats.total_publications} publikacji
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Kraje */}
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <h3 className="text-sm font-bold text-slate-700 mb-3">Rozkład Naukowców wg Krajów</h3>
+                      <div className="space-y-3 text-sm">
+                        {[
+                          { label: "🇵🇱 Polska", val: stats.countries.PL || 0, color: "bg-red-500" },
+                          { label: "🇩🇪 Niemcy", val: stats.countries.DE || 0, color: "bg-amber-500" },
+                          { label: "🇫🇷 Francja", val: stats.countries.FR || 0, color: "bg-blue-600" }
+                        ].map(item => {
+                          const pct = stats.total_researchers ? Math.round((item.val / stats.total_researchers) * 100) : 0;
+                          return (
+                            <div key={item.label}>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="font-medium text-slate-700">{item.label}</span>
+                                <span className="font-bold text-slate-900">{item.val} ({pct}%)</span>
+                              </div>
+                              <div className="w-full bg-slate-200 rounded-full h-2">
+                                <div className={`h-2 rounded-full ${item.color}`} style={{ width: `${pct}%` }}></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Uczelnie */}
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 md:col-span-2">
+                      <h3 className="text-sm font-bold text-slate-700 mb-3">9 Uczelni Trójkąta Weimarskiego</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        {Object.entries(stats.institutions || {}).map(([inst, cnt]) => (
+                          <div key={inst} className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-slate-100">
+                            <span className="text-slate-700 font-medium">{inst}</span>
+                            <span className="font-bold text-indigo-600">{cnt}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Domeny naukowe (9 głównych obszarów) */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3">Rozkład wg Głównych Obszarów Naukowych</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                      {Object.entries(stats.domains || {}).map(([dom, cnt]) => {
+                        const pct = stats.total_researchers ? Math.round((cnt / stats.total_researchers) * 100) : 0;
+                        return (
+                          <div key={dom} className="p-3 bg-white rounded-lg border border-slate-100">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-slate-800 font-semibold truncate mr-2" title={dom}>{dom}</span>
+                              <span className="font-bold text-indigo-600 shrink-0">{cnt}</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-1.5">
+                              <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, pct * 3)}%` }}></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Dyscypliny OpenAlex */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3">Szczegółowe Dyscypliny OpenAlex ({Object.keys(stats.fields || {}).length})</h3>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {Object.entries(stats.fields || {}).map(([fld, cnt]) => (
+                        <span key={fld} className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700">
+                          {fld}: <strong className="text-indigo-600">{cnt}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Modal Profilu Naukowca */}
+          {detailData && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${getBadgeClass(detailData.country)}`}>
+                        {getFlag(detailData.country)}
+                      </span>
+                      {detailData.field && (
+                        <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                          {detailData.field}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900 mt-2">{detailData.name}</h2>
+                    <p className="text-sm text-slate-600 font-medium">{detailData.affiliation_full || detailData.affiliation}</p>
+                    <p className="text-xs text-indigo-600 font-medium mt-0.5">
+                      {detailData.primary_domain}{detailData.subfield ? ` (${detailData.subfield})` : ""}
+                    </p>
+                    {detailData.orcid && (
+                      <p className="text-xs text-slate-400 mt-1 font-mono">
+                        ORCID: <a href={`https://orcid.org/${detailData.orcid}`} target="_blank" className="text-indigo-600 hover:underline">{detailData.orcid}</a>
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setDetailData(null)}
+                    className="text-slate-400 hover:text-slate-600 p-2"
+                  >
+                    <i className="fa-solid fa-xmark text-xl"></i>
+                  </button>
+                </div>
+
+                <div className="py-4 space-y-4">
+                  {/* Biogram */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-1">Syntetyczny Biogram Badawczy (Krok 2)</h4>
+                    <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      {detailData.profile_summary}
+                    </p>
+                  </div>
+
+                  {/* Kompetencje */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Wyznaczone Kompetencje</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(detailData.competencies || []).map((c, i) => (
+                        <span key={i} className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg font-medium">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Publikacje */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">
+                      Ostatnie Publikacje z Abstraktami ({detailData.publications?.length || 0})
+                    </h4>
+                    <div className="space-y-3">
+                      {(detailData.publications || []).map((p, i) => (
+                        <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                          <div className="font-bold text-slate-900 text-sm">{p.title} ({p.publication_year})</div>
+                          {p.abstract ? (
+                            <p className="text-slate-600 mt-1.5 leading-relaxed italic">
+                              „{p.abstract.slice(0, 280)}...”
+                            </p>
+                          ) : (
+                            <p className="text-slate-400 mt-1">Brak abstraktu w otwartym rejestrze.</p>
+                          )}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(p.topics || []).slice(0, 3).map((t, j) => (
+                              <span key={j} className="text-[10px] bg-white text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+                  <button
+                    onClick={() => { runRecommendation(detailData); setDetailData(null); }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold"
+                  >
+                    Szukaj partnerów dla tego naukowca
+                  </button>
+                  <button
+                    onClick={() => setDetailData(null)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold"
+                  >
+                    Zamknij
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer className="bg-slate-900 text-slate-400 text-xs py-6 border-t border-slate-800 text-center">
+            <p>Weimar Research Hub • Prototyp systemu wyszukiwania partnerów do współpracy naukowej (Polska – Niemcy – Francja • Wszystkie dziedziny nauki)</p>
+            <p className="text-slate-500 mt-1">Wykorzystane technologie: Python, OpenAlex API, ORCID, TF-IDF + SVD Embeddings (LSA), RAG, React, Flask / FastAPI, PostgreSQL / SQLite.</p>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
