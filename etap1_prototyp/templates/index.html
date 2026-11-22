@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weimar Research Hub — Prototyp (Etap 1)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .kraj-PL { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .kraj-DE { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .kraj-FR { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+  <!-- NAGŁÓWEK -->
+  <header class="bg-slate-900 text-white py-4 px-6 shadow">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-bold tracking-tight">Weimar Research Hub</h1>
+          <span class="text-xs bg-amber-500 text-slate-950 font-semibold px-2 py-0.5 rounded">
+            PROTOTYP ROBOCZY — ETAP 1
+          </span>
+        </div>
+        <p class="text-xs text-slate-300 mt-0.5">
+          Wyszukiwanie i rekomendacja partnerów naukowych: Polska (PL) • Niemcy (DE) • Francja (FR)
+        </p>
+      </div>
+      <div id="stats-bar" class="text-xs bg-slate-800 px-3 py-2 rounded border border-slate-700">
+        Ładowanie statystyk bazy...
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 md:p-6">
+
+    <!-- PANEL FILTRÓW -->
+    <section class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-5">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Szukaj (nazwisko / temat)</label>
+          <input id="filter-q" type="text" placeholder="np. quantum, cancer, AI..."
+                 class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Kraj</label>
+          <select id="filter-country" class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm">
+            <option value="">Wszystkie (PL + DE + FR)</option>
+            <option value="PL">Polska (PL)</option>
+            <option value="DE">Niemcy (DE)</option>
+            <option value="FR">Francja (FR)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Uczelnia (9 instytucji)</label>
+          <select id="filter-affiliation" class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm">
+            <option value="">Wszystkie uczelnie</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Obszar nauki</label>
+          <select id="filter-domain" class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm">
+            <option value="">Wszystkie dziedziny</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-2">
+          <button onclick="loadResearchers()"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-1.5 rounded w-full">
+            Filtruj bazę
+          </button>
+          <button onclick="resetFilters()"
+                  class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded">
+            Reset
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- GŁÓWNY UKŁAD 2 KOLUMN -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- LEWA KOLUMNA: LISTA NAUKOWCÓW (KROK 1) -->
+      <aside class="lg:col-span-4 bg-white rounded-lg shadow-sm border border-slate-200 flex flex-col h-[760px]">
+        <div class="p-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-lg">
+          <h2 class="font-semibold text-sm text-slate-700">1. Baza naukowców (OpenAlex)</h2>
+          <span id="results-count" class="text-xs text-slate-500">0 wyników</span>
+        </div>
+        <div id="researchers-list" class="divide-y divide-slate-100 overflow-y-auto flex-1">
+          <!-- Wypełniane przez JS -->
+        </div>
+      </aside>
+
+      <!-- PRAWA KOLUMNA: PROFIL (KROK 2) + REKOMENDACJE (KROK 3) + PLAN DALSZYCH PRAC -->
+      <section class="lg:col-span-8 flex flex-col gap-5">
+
+        <!-- KARTA PROFILU NAUKOWCA (KROK 2) -->
+        <div id="profile-box" class="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">Wybierz naukowca z listy po lewej stronie...</p>
+        </div>
+
+        <!-- PANEL REKOMENDACJI PARTNERÓW (KROK 3) -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 mb-4">
+            <div>
+              <h2 class="font-bold text-base text-slate-800">
+                2. Rekomendowani partnerzy do współpracy (Krok 3)
+              </h2>
+              <p class="text-xs text-slate-500">
+                Wektory semantyczne TF-IDF + SVD (128-D) • Ranking Top 5 kandydatów
+              </p>
+            </div>
+            <label class="flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+              <input id="foreign-only" type="checkbox" checked onchange="loadRecommendations()"
+                     class="rounded border-slate-300" />
+              Tylko z innego kraju (współpraca międzynarodowa)
+            </label>
+          </div>
+
+          <!-- Przełącznik 2 trybów z zadania -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+            <button id="btn-similarity" onclick="setMode('similarity')"
+                    class="text-left p-3 rounded border text-sm transition">
+              <div class="font-semibold">Tryb 1: Podobieństwo tematyczne</div>
+              <div class="text-xs opacity-80 mt-0.5">
+                Szuka badaczy z tej samej dziedziny o zbliżonych publikacjach (Cosine Similarity + Jaccard)
+              </div>
+            </button>
+            <button id="btn-complementarity" onclick="setMode('complementarity')"
+                    class="text-left p-3 rounded border text-sm transition">
+              <div class="font-semibold">Tryb 2: Komplementarność kompetencji</div>
+              <div class="text-xs opacity-80 mt-0.5">
+                Łączy uzupełniające się dziedziny (np. AI + Medycyna) z zachowaniem punktu styku
+              </div>
+            </button>
+          </div>
+
+          <!-- Lista wyników rekomendacji -->
+          <div id="recommendations-list" class="space-y-3">
+            <p class="text-sm text-slate-500">Wybierz naukowca, aby obliczyć ranking rekomendacji.</p>
+          </div>
+        </div>
+
+        <!-- SEKCJA: CO ZOSTAŁO DO ZROBIENIA W KOLEJNYCH ETAPACH (TODO) -->
+        <div class="bg-amber-50/70 rounded-lg border border-dashed border-amber-300 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-900">
+              Planowane w kolejnym etapie projektu (Etap 2 — TODO)
+            </h3>
+            <span class="text-[11px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded font-medium">
+              W przygotowaniu
+            </span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-700">
+            <div class="bg-white/80 p-3 rounded border border-amber-200">
+              <div class="font-semibold text-slate-800 mb-1">Krok 4: Uzasadnienia RAG / LLM</div>
+              <p class="text-slate-600">
+                Automatyczne generowanie tekstowego uzasadnienia współpracy z cytowaniem konkretnych artykułów obu badaczy.
+              </p>
+              <button disabled class="mt-2 w-full bg-slate-200 text-slate-500 py-1 rounded text-[11px] cursor-not-allowed">
+                Generuj uzasadnienie RAG (Wkrótce)
+              </button>
+            </div>
+            <div class="bg-white/80 p-3 rounded border border-amber-200">
+              <div class="font-semibold text-slate-800 mb-1">Krok 5: Propozycje projektów (2–3 os.)</div>
+              <p class="text-slate-600">
+                Generowanie tematów wspólnych badań, podziału pakietów roboczych i rezultatów dla konsorcjum PL-DE-FR.
+              </p>
+              <button disabled class="mt-2 w-full bg-slate-200 text-slate-500 py-1 rounded text-[11px] cursor-not-allowed">
+                Generator konsorcjum (Wkrótce)
+              </button>
+            </div>
+            <div class="bg-white/80 p-3 rounded border border-amber-200">
+              <div class="font-semibold text-slate-800 mb-1">Krok 7: Eksperymenty (P@5, P@10)</div>
+              <p class="text-slate-600">
+                Przeprowadzenie min. 20 scenariuszy testowych i porównanie trafności obu trybów rekomendacji z oceną ekspercką.
+              </p>
+              <button disabled class="mt-2 w-full bg-slate-200 text-slate-500 py-1 rounded text-[11px] cursor-not-allowed">
+                Raport ewaluacji (Wkrótce)
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </main>
+
+  <!-- PROSTY SKRYPT JS OBSŁUGUJĄCY API -->
+  <script>
+    let currentResearcherId = null;
+    let currentMode = "similarity";
+
+    // 1. Pobranie statystyk i opcji filtrów przy starcie
+    async function initApp() {
+      const res = await fetch("/api/stats");
+      const stats = await res.json();
+
+      document.getElementById("stats-bar").innerHTML =
+        `Baza danych: <b>${stats.total_researchers} naukowców</b> | ` +
+        `PL: <b>${stats.countries.PL || 0}</b> • DE: <b>${stats.countries.DE || 0}</b> • FR: <b>${stats.countries.FR || 0}</b> | ` +
+        `Publikacje: <b>${stats.total_publications}</b>`;
+
+      const affSelect = document.getElementById("filter-affiliation");
+      stats.affiliations.forEach(a => {
+        affSelect.innerHTML += `<option value="${a}">${a}</option>`;
+      });
+
+      const domSelect = document.getElementById("filter-domain");
+      stats.domains.forEach(d => {
+        domSelect.innerHTML += `<option value="${d}">${d}</option>`;
+      });
+
+      updateModeButtons();
+      await loadResearchers();
+    }
+
+    // 2. Pobranie listy naukowców z uwzględnieniem filtrów
+    async function loadResearchers() {
+      const q = document.getElementById("filter-q").value;
+      const country = document.getElementById("filter-country").value;
+      const affiliation = document.getElementById("filter-affiliation").value;
+      const domain = document.getElementById("filter-domain").value;
+
+      const params = new URLSearchParams({ q, country, affiliation, domain });
+      const res = await fetch(`/api/researchers?${params.toString()}`);
+      const data = await res.json();
+
+      document.getElementById("results-count").textContent = `${data.total} naukowców`;
+      const container = document.getElementById("researchers-list");
+
+      if (!data.results.length) {
+        container.innerHTML = `<p class="p-4 text-sm text-slate-500">Brak naukowców spełniających kryteria.</p>`;
+        return;
+      }
+
+      container.innerHTML = data.results.map(r => `
+        <div onclick="selectResearcher('${r.openalex_id}')"
+             id="row-${r.openalex_id}"
+             class="p-3 hover:bg-blue-50 cursor-pointer transition ${currentResearcherId === r.openalex_id ? 'bg-blue-50 border-l-4 border-blue-600' : ''}">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-semibold text-sm text-slate-900">${r.name}</span>
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded kraj-${r.country}">
+              ${r.country} • ${r.affiliation}
+            </span>
+          </div>
+          <div class="text-xs text-slate-600 mt-1">${r.primary_domain} (${r.field})</div>
+          <div class="text-[11px] text-slate-400 mt-1">
+            h-index: <b>${r.h_index}</b> • cytowania: <b>${r.cited_by_count}</b> • prace: <b>${r.works_count}</b>
+          </div>
+        </div>
+      `).join("");
+
+      // Automatycznie wybierz pierwszego naukowca na liście
+      if (!currentResearcherId || !data.results.some(x => x.openalex_id === currentResearcherId)) {
+        selectResearcher(data.results[0].openalex_id);
+      }
+    }
+
+    // 3. Wybór konkretnego naukowca i załadowanie jego profilu (Krok 2)
+    async function selectResearcher(authorId) {
+      currentResearcherId = authorId;
+      document.querySelectorAll("#researchers-list > div").forEach(el => {
+        el.classList.remove("bg-blue-50", "border-l-4", "border-blue-600");
+      });
+      const activeRow = document.getElementById(`row-${authorId}`);
+      if (activeRow) activeRow.classList.add("bg-blue-50", "border-l-4", "border-blue-600");
+
+      const res = await fetch(`/api/researchers/${authorId}`);
+      const r = await res.json();
+
+      const kompTags = (r.competencies || []).map(c =>
+        `<span class="bg-slate-100 border border-slate-300 text-slate-700 text-xs px-2 py-0.5 rounded">${c}</span>`
+      ).join(" ");
+
+      const pubsHtml = (r.publications || []).map(p => `
+        <li class="border-b border-slate-100 pb-2 last:border-0">
+          <div class="font-medium text-xs text-slate-800">${p.title} (${p.publication_year || 'b.d.'})</div>
+          ${p.abstract ? `<div class="text-[11px] text-slate-500 mt-0.5 line-clamp-2">${p.abstract}</div>` : ''}
+        </li>
+      `).join("");
+
+      document.getElementById("profile-box").innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-bold text-slate-900">${r.name}</h2>
+              <span class="text-xs font-bold px-2 py-0.5 rounded kraj-${r.country}">
+                ${r.country} • ${r.affiliation_full || r.affiliation}
+              </span>
+            </div>
+            <div class="text-xs text-slate-600 mt-1">
+              Obszar: <b>${r.primary_domain}</b> | Dyscyplina OpenAlex: <b>${r.field}</b> (${r.subfield || ''})
+            </div>
+          </div>
+          <div class="text-right text-xs text-slate-600">
+            <div>h-index: <b>${r.h_index}</b> | Cytowania: <b>${r.cited_by_count}</b></div>
+            <div class="text-[11px] text-slate-400">OpenAlex ID: ${r.openalex_id}</div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="text-xs font-semibold text-slate-700 mb-1">
+            Automatycznie wygenerowany profil (Krok 2):
+          </div>
+          <p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded border border-slate-200">
+            ${r.profile_summary || 'Brak opisu.'}
+          </p>
+        </div>
+
+        <div class="mt-3">
+          <div class="text-xs font-semibold text-slate-700 mb-1">
+            Wyznaczone kompetencje i słowa kluczowe:
+          </div>
+          <div class="flex flex-wrap gap-1.5">${kompTags}</div>
+        </div>
+
+        <details class="mt-3 text-xs">
+          <summary class="cursor-pointer font-semibold text-blue-700 hover:underline">
+            Pokaż pobrane publikacje i abstrakty z OpenAlex (${(r.publications || []).length})
+          </summary>
+          <ul class="mt-2 space-y-2 bg-slate-50 p-3 rounded border border-slate-200">
+            ${pubsHtml || '<li>Brak publikacji</li>'}
+          </ul>
+        </details>
+      `;
+
+      loadRecommendations();
+    }
+
+    // 4. Pobranie rekomendacji partnerów (Krok 3)
+    async function loadRecommendations() {
+      if (!currentResearcherId) return;
+      const foreignOnly = document.getElementById("foreign-only").checked;
+      const listEl = document.getElementById("recommendations-list");
+      listEl.innerHTML = `<p class="text-sm text-slate-500">Obliczanie rekomendacji...</p>`;
+
+      const params = new URLSearchParams({
+        source_id: currentResearcherId,
+        mode: currentMode,
+        foreign_only: foreignOnly
+      });
+      const res = await fetch(`/api/recommendations?${params.toString()}`);
+      const data = await res.json();
+
+      if (!data.results || !data.results.length) {
+        listEl.innerHTML = `<p class="text-sm text-slate-500">Brak rekomendacji.</p>`;
+        return;
+      }
+
+      listEl.innerHTML = data.results.map((item, idx) => {
+        const partner = item.researcher;
+        const pct = (item.score * 100).toFixed(1);
+        const skills = currentMode === "similarity"
+          ? (item.shared_competencies || item.shared_topics || [])
+          : (item.new_competencies || []);
+        const skillsLabel = currentMode === "similarity" ? "Wspólne obszary:" : "Unikalne kompetencje partnera:";
+
+        return `
+          <div class="border border-slate-200 rounded-lg p-3.5 hover:border-blue-300 transition bg-slate-50/50">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="bg-slate-800 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                  ${idx + 1}
+                </span>
+                <div>
+                  <span onclick="selectResearcher('${partner.openalex_id}')"
+                        class="font-bold text-sm text-blue-700 hover:underline cursor-pointer">
+                    ${partner.name}
+                  </span>
+                  <span class="ml-1.5 text-[11px] font-bold px-2 py-0.5 rounded kraj-${partner.country}">
+                    ${partner.country} • ${partner.affiliation}
+                  </span>
+                </div>
+              </div>
+              <div class="text-right">
+                <span class="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded">
+                  Dopasowanie: ${pct}%
+                </span>
+                <span class="text-[11px] text-slate-500 ml-2">
+                  (Cosine: ${item.cosine_similarity})
+                </span>
+              </div>
+            </div>
+
+            <div class="text-xs text-slate-600 mt-1.5">
+              Obszar: <b>${partner.primary_domain}</b> (${partner.field}) • h-index: ${partner.h_index}
+            </div>
+
+            <div class="text-xs text-slate-700 mt-1.5 bg-white p-2 rounded border border-slate-200">
+              ${item.explanation_short}
+            </div>
+
+            ${skills.length ? `
+              <div class="mt-2 flex flex-wrap items-center gap-1">
+                <span class="text-[11px] font-semibold text-slate-500 mr-1">${skillsLabel}</span>
+                ${skills.map(s => `<span class="text-[11px] bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded">${s}</span>`).join("")}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      updateModeButtons();
+      loadRecommendations();
+    }
+
+    function updateModeButtons() {
+      const btnSim = document.getElementById("btn-similarity");
+      const btnComp = document.getElementById("btn-complementarity");
+      if (currentMode === "similarity") {
+        btnSim.className = "text-left p-3 rounded border-2 border-blue-600 bg-blue-50 text-blue-950 text-sm";
+        btnComp.className = "text-left p-3 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm";
+      } else {
+        btnComp.className = "text-left p-3 rounded border-2 border-indigo-600 bg-indigo-50 text-indigo-950 text-sm";
+        btnSim.className = "text-left p-3 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm";
+      }
+    }
+
+    function resetFilters() {
+      document.getElementById("filter-q").value = "";
+      document.getElementById("filter-country").value = "";
+      document.getElementById("filter-affiliation").value = "";
+      document.getElementById("filter-domain").value = "";
+      loadResearchers();
+    }
+
+    initApp();
+  </script>
+</body>
+</html>
